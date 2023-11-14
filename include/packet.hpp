@@ -82,6 +82,9 @@ size_t rdt_frame_size(uint8_t* frame) {
     case RdtFrameType::CONN_CLOSE: {
       return sizeof(RdtCommonFrameHeader);
     }
+    case RdtFrameType::DATA_ACK: {
+      return sizeof(RdtCommonFrameHeader);
+    }
   }
 
   return 0;

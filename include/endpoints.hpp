@@ -221,7 +221,7 @@ void Endpoint::cleanup() {
 #ifdef _WIN32
     closesocket(this->socket.value());
 #else
-    close(this->socket.value());
+    ::close(this->socket.value());
 #endif
   }
 #ifdef _WIN32
