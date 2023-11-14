@@ -298,9 +298,7 @@ void Endpoint::close() {
   uint8_t conn_close_buffer[sizeof(conn_close_header) + sizeof(conn_close_frame)];
 
   assert(sizeof(conn_close_header) + sizeof(conn_close_frame) <= sizeof(conn_close_buffer));
-
   memcpy(conn_close_buffer, &conn_close_header, sizeof(conn_close_header));
-
   memcpy(
     conn_close_buffer + sizeof(conn_close_header), &conn_close_frame, sizeof(conn_close_frame)
   );
@@ -309,8 +307,9 @@ void Endpoint::close() {
   ((RdtHeader*)conn_close_buffer)->checksum = rdt_packet_checksum(conn_close_buffer);
 
   // occupy the socket
-  std::lock_guard<std::mutex> lock(this->send_mutex);
   this->state = Endpoint::State::Closing;
+
+  log(std::format("sending connection close with seq {}", conn_close_frame.seq), LogLevel::Info);
 
   bool success =
     this->send_packet(conn_close_buffer, sizeof(conn_close_header) + sizeof(conn_close_frame));
@@ -716,8 +715,10 @@ void Endpoint::recv_handler() {
         offset += sizeof(RdtCommonFrameHeader);
 
       } else if (frame_header->type == RdtFrameType::CONN_ACK) {
-        if (this->role != Endpoint::Role::Sender) {
-          log("received connection response from receiver endpoint", LogLevel::Warn);
+        if (this->role != Endpoint::Role::Sender && this->state != Endpoint::State::Closing) {
+          log(
+            "received connection response from receiver endpoint while not closing", LogLevel::Warn
+          );
           offset += sizeof(RdtCommonFrameHeader);
           continue;
         }
@@ -803,16 +804,14 @@ void Endpoint::recv_handler() {
         };
 
         RdtCommonFrameHeader conn_close_frame = {
-          .type = RdtFrameType::CONN_CLOSE,
+          .type = RdtFrameType::CONN_ACK,
           .seq = valid ? frame_header->seq : frame_header->seq ^ 1,
         };
 
         uint8_t conn_close_buffer[sizeof(conn_close_header) + sizeof(conn_close_frame)];
 
         assert(sizeof(conn_close_header) + sizeof(conn_close_frame) <= sizeof(conn_close_buffer));
-
         memcpy(conn_close_buffer, &conn_close_header, sizeof(conn_close_header));
-
         memcpy(
           conn_close_buffer + sizeof(conn_close_header), &conn_close_frame, sizeof(conn_close_frame)
         );
@@ -835,6 +834,8 @@ void Endpoint::recv_handler() {
 
         this->state = Endpoint::State::Idle;
 
+        this->active = false;
+
       } else {
         log("received packet with unknown frame type", LogLevel::Warn);
       }
@@ -843,7 +844,7 @@ void Endpoint::recv_handler() {
 }
 
 void Endpoint::run() {
-  while (true) {
+  while (this->active) {
     std::string prompt;
     std::cout << "> ";
     std::getline(std::cin, prompt);
@@ -880,7 +881,9 @@ void Endpoint::run() {
       this->send_file(tokens[1]);
     } else if (tokens[0] == "close") {
       log("closing connection", LogLevel::Info);
-      this->close();
+      if (this->state != Endpoint::State::Idle) {
+        this->close();
+      }
       break;
     } else if (tokens[0] == "file") {
       log(std::format("received {} packets", this->recv_count.load()), LogLevel::Debug);
@@ -900,6 +903,8 @@ void Endpoint::run() {
         }
         this->file.open(tokens[1], std::ios::out | std::ios::binary);
       }
+    } else {
+      log(std::format("unknown command: {}", tokens[0]), LogLevel::Warn);
     }
   }
 }
