@@ -39,13 +39,14 @@ enum class RdtFrameType : uint8_t {
   /// Data acknowledgement frame
   DATA_ACK = 2,
   /// Connection request
-  CONN_REQ = 2,
+  CONN_REQ = 3,
   /// Connection response
-  CONN_ACK = 3,
+  CONN_ACK = 4,
   /// Connection close
-  CONN_CLOSE = 4,
+  CONN_CLOSE = 5,
 };
 
+/// Common frame header for all frames.
 struct RdtCommonFrameHeader {
   /// Frame type
   RdtFrameType type;
@@ -53,6 +54,9 @@ struct RdtCommonFrameHeader {
   uint32_t seq;
 };
 
+/// The data frame header
+///
+/// In a stop-and-wait protocol, no fragmentation information is needed.
 struct RdtDataFrameHeader {
   /// Common header
   RdtCommonFrameHeader common;

@@ -1,3 +1,4 @@
 build/
+test/recv/
 .vscode/
 .DS_Store

@@ -13,10 +13,10 @@
 #define TERM_NONE "\033[0m"
 
 enum class LogLevel {
-  Debug,
-  Info,
-  Warn,
-  Error,
+  Debug = 0b1,
+  Info = 0b10,
+  Warn = 0b100,
+  Error = 0b1000,
 };
 
 void log(const std::string& msg, LogLevel log_level) {
