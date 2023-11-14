@@ -12,8 +12,7 @@ int main(int argc, char* argv[]) {
   // --timeout, -t
   std::chrono::milliseconds timeout = std::chrono::milliseconds(1000);
 
-  
-    Endpoint endpoint;
+  Endpoint endpoint;
 
   try {
     // Parse command line arguments.
@@ -49,7 +48,6 @@ int main(int argc, char* argv[]) {
 
     return 0;
   } catch (const std::exception& e) {
-
     endpoint.cleanup();
     std::cerr << e.what() << std::endl;
     return 1;

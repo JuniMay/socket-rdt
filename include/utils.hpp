@@ -44,9 +44,7 @@ void log(const std::string& msg, LogLevel log_level) {
       break;
   }
 
-  std::cout << std::format(
-                 "[{} {} {:5} {}] {}", term_color, time, prefix, TERM_NONE, msg
-               )
+  std::cout << std::format("[{} {} {:5} {}] {}", term_color, time, prefix, TERM_NONE, msg)
             << std::endl;
 }
 

@@ -62,7 +62,6 @@ struct RdtDataFrameHeader {
 
 /// Calculate the size of a frame.
 size_t rdt_frame_size(uint8_t* frame) {
-
   RdtFrameType type = static_cast<RdtFrameType>(*frame);
 
   switch (type) {
@@ -125,11 +124,17 @@ bool rdt_packet_valid(uint8_t* packet) {
   RdtHeader* header = reinterpret_cast<RdtHeader*>(packet);
   uint16_t checksum = header->checksum;
   header->checksum = 0;
-  
+
   uint16_t valid_checksum = rdt_packet_checksum(packet);
   bool valid = checksum == valid_checksum;
 
-  log(std::format("rdt_packet_valid: checksum = {}, valid_checksum = {}, valid = {}", checksum, valid_checksum, valid), LogLevel::Debug);
+  log(
+    std::format(
+      "rdt_packet_valid: checksum = {}, valid_checksum = {}, valid = {}", checksum, valid_checksum,
+      valid
+    ),
+    LogLevel::Debug
+  );
 
   header->checksum = checksum;
   return valid;

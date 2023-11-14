@@ -59,9 +59,7 @@ struct Endpoint {
   void send_file(const std::string& filename);
 
   /// Set the timeout.
-  void set_timeout(std::chrono::milliseconds timeout) {
-    this->timeout = timeout;
-  }
+  void set_timeout(std::chrono::milliseconds timeout) { this->timeout = timeout; }
 
   /// Run the endpoint with a repl.
   void run();
@@ -104,10 +102,7 @@ void Endpoint::init(uint16_t port, Role role) {
 #ifdef _WIN32
   WSADATA wsa_data;
   if (WSAStartup(MAKEWORD(2, 2), &wsa_data) != 0) {
-    log(
-      std::format("failed to initialize Winsock: {}", WSAGetLastError()),
-      LogLevel::Error
-    );
+    log(std::format("failed to initialize Winsock: {}", WSAGetLastError()), LogLevel::Error);
     throw std::runtime_error("failed to initialize Winsock");
   }
 #endif
@@ -147,15 +142,21 @@ void Endpoint::init(uint16_t port, Role role) {
 
   this->state = Endpoint::State::Idle;
 
+  this->recv_thread = std::thread([this]() {
+    try {
+      this->recv_handler();
+    } catch (std::exception& e) {
+      log(std::format("recv thread error: {}", e.what()), LogLevel::Error);
+    }
+  });
+
   log("endpoint initialized", LogLevel::Info);
 }
 
 void Endpoint::show_info() {
   log("endpoint info:", LogLevel::Info);
   log(
-    std::format(
-      "  type: {}", this->role == Endpoint::Role::Sender ? "sender" : "receiver"
-    ),
+    std::format("  type: {}", this->role == Endpoint::Role::Sender ? "sender" : "receiver"),
     LogLevel::Info
   );
 
@@ -172,23 +173,15 @@ void Endpoint::show_info() {
   getaddrinfo(hostname, NULL, &hints, &addrs);
 
   char ip[16];
-  inet_ntop(
-    AF_INET, &((struct sockaddr_in*)addrs->ai_addr)->sin_addr, ip, sizeof(ip)
-  );
+  inet_ntop(AF_INET, &((struct sockaddr_in*)addrs->ai_addr)->sin_addr, ip, sizeof(ip));
 
-  log(
-    std::format("  address: {}:{}", ip, ntohs(this->addr.value().sin_port)),
-    LogLevel::Info
-  );
+  log(std::format("  address: {}:{}", ip, ntohs(this->addr.value().sin_port)), LogLevel::Info);
 
   // show remote
   if (this->remote_addr.has_value()) {
     inet_ntop(AF_INET, &this->remote_addr.value().sin_addr, ip, sizeof(ip));
     log(
-      std::format(
-        "  remote: {}:{}", ip, ntohs(this->remote_addr.value().sin_port)
-      ),
-      LogLevel::Info
+      std::format("  remote: {}:{}", ip, ntohs(this->remote_addr.value().sin_port)), LogLevel::Info
     );
   }
 
@@ -249,20 +242,13 @@ void Endpoint::connect() {
 
     uint8_t conn_req_buffer[1024];
 
-    assert(
-      sizeof(conn_req_header) + sizeof(conn_req_frame) <=
-      sizeof(conn_req_buffer)
-    );
+    assert(sizeof(conn_req_header) + sizeof(conn_req_frame) <= sizeof(conn_req_buffer));
 
     memcpy(conn_req_buffer, &conn_req_header, sizeof(conn_req_header));
-    memcpy(
-      conn_req_buffer + sizeof(conn_req_header), &conn_req_frame,
-      sizeof(conn_req_frame)
-    );
+    memcpy(conn_req_buffer + sizeof(conn_req_header), &conn_req_frame, sizeof(conn_req_frame));
 
     // checksum
-    ((RdtHeader*)conn_req_buffer)->checksum =
-      rdt_packet_checksum(conn_req_buffer);
+    ((RdtHeader*)conn_req_buffer)->checksum = rdt_packet_checksum(conn_req_buffer);
 
     // occupy the socket
     this->send_mutex.lock();
@@ -317,10 +303,7 @@ void Endpoint::connect() {
       throw std::runtime_error("failed to connect");
     } else {
       // show retries
-      log(
-        std::format("connection established after {} retries", retries),
-        LogLevel::Info
-      );
+      log(std::format("connection established after {} retries", retries), LogLevel::Info);
     }
   } else {
     log("cannot connect from receiver endpoint", LogLevel::Error);
@@ -357,8 +340,7 @@ void Endpoint::recv_handler() {
   while (this->active) {
     int recv_size = recvfrom(
       this->socket.value(), (char*)buffer, sizeof(buffer), 0,
-      (struct sockaddr*)&this->remote_addr.value(),
-      (socklen_t*)&addr_len
+      (struct sockaddr*)&this->remote_addr.value(), (socklen_t*)&addr_len
     );
 
     if (recv_size < 0) {
@@ -373,15 +355,9 @@ void Endpoint::recv_handler() {
 #endif
 
 #ifdef _WIN32
-      log(
-        std::format("failed to receive packet: {}", WSAGetLastError()),
-        LogLevel::Error
-      );
+      log(std::format("failed to receive packet: {}", WSAGetLastError()), LogLevel::Error);
 #else
-      log(
-        std::format("failed to receive packet: {}", strerror(errno)),
-        LogLevel::Error
-      );
+      log(std::format("failed to receive packet: {}", strerror(errno)), LogLevel::Error);
 #endif
       throw std::runtime_error("failed to receive packet");
     }
@@ -414,12 +390,10 @@ void Endpoint::recv_handler() {
     size_t offset = sizeof(RdtHeader);
 
     for (size_t i = 0; i < header->number; i++) {
-      RdtCommonFrameHeader* frame_header =
-        (RdtCommonFrameHeader*)(buffer + offset);
+      RdtCommonFrameHeader* frame_header = (RdtCommonFrameHeader*)(buffer + offset);
 
       if (frame_header->type == RdtFrameType::DATA) {
-        RdtDataFrameHeader* frame_header =
-          (RdtDataFrameHeader*)(buffer + offset);
+        RdtDataFrameHeader* frame_header = (RdtDataFrameHeader*)(buffer + offset);
 
         // Only when a **Receiver** receives a data and the state is
         // **Connected** or **Closing**, it should send an ACK.
@@ -444,17 +418,11 @@ void Endpoint::recv_handler() {
         }
 
         log(
-          std::format(
-            "received data frame with seq {}", frame_header->common.seq
-          ),
-          LogLevel::Info
+          std::format("received data frame with seq {}", frame_header->common.seq), LogLevel::Info
         );
 
         // write data to file (in binary)
-        this->file.write(
-          (char*)buffer + offset + sizeof(RdtDataFrameHeader),
-          frame_header->length
-        );
+        this->file.write((char*)buffer + offset + sizeof(RdtDataFrameHeader), frame_header->length);
 
         // send ACK
         RdtHeader ack_header = {
@@ -487,27 +455,20 @@ void Endpoint::recv_handler() {
           throw std::runtime_error("failed to send data ACK");
         }
 
-        log(
-          std::format("sent data ACK with seq {}", ack_frame.seq),
-          LogLevel::Info
-        );
+        log(std::format("sent data ACK with seq {}", ack_frame.seq), LogLevel::Info);
 
         offset += sizeof(RdtDataFrameHeader) + frame_header->length;
 
       } else if (frame_header->type == RdtFrameType::CONN_REQ) {
         if (this->role != Endpoint::Role::Receiver) {
-          log(
-            "received connection request from sender endpoint", LogLevel::Warn
-          );
+          log("received connection request from sender endpoint", LogLevel::Warn);
 
           offset += sizeof(RdtCommonFrameHeader);
           continue;
         }
 
         if (this->waiting_for_ack) {
-          log(
-            "received connection request while waiting for ACK", LogLevel::Warn
-          );
+          log("received connection request while waiting for ACK", LogLevel::Warn);
           offset += sizeof(RdtCommonFrameHeader);
           continue;
         }
@@ -515,10 +476,7 @@ void Endpoint::recv_handler() {
         uint32_t seq = frame_header->seq;
 
         if (this->state == Endpoint::State::Idle || this->state == Endpoint::State::Connected) {
-          log(
-            std::format("received connection request with seq {}", seq),
-            LogLevel::Info
-          );
+          log(std::format("received connection request with seq {}", seq), LogLevel::Info);
 
           // send connection response
           RdtHeader conn_ack_header = {
@@ -535,20 +493,15 @@ void Endpoint::recv_handler() {
 
           uint8_t conn_ack_buffer[1024];
 
-          assert(
-            sizeof(conn_ack_header) + sizeof(conn_ack_frame) <=
-            sizeof(conn_ack_buffer)
-          );
+          assert(sizeof(conn_ack_header) + sizeof(conn_ack_frame) <= sizeof(conn_ack_buffer));
 
           memcpy(conn_ack_buffer, &conn_ack_header, sizeof(conn_ack_header));
           memcpy(
-            conn_ack_buffer + sizeof(conn_ack_header), &conn_ack_frame,
-            sizeof(conn_ack_frame)
+            conn_ack_buffer + sizeof(conn_ack_header), &conn_ack_frame, sizeof(conn_ack_frame)
           );
 
           // checksum
-          ((RdtHeader*)conn_ack_buffer)->checksum =
-            rdt_packet_checksum(conn_ack_buffer);
+          ((RdtHeader*)conn_ack_buffer)->checksum = rdt_packet_checksum(conn_ack_buffer);
 
           // occupy the socket
           std::lock_guard<std::mutex> lock(this->send_mutex);
@@ -558,10 +511,7 @@ void Endpoint::recv_handler() {
             throw std::runtime_error("failed to send connection response");
           }
 
-          log(
-            std::format("sent connection response with seq {}", seq),
-            LogLevel::Info
-          );
+          log(std::format("sent connection response with seq {}", seq), LogLevel::Info);
 
         } else {
           log("received connection request in invalid state", LogLevel::Warn);
@@ -571,19 +521,13 @@ void Endpoint::recv_handler() {
 
       } else if (frame_header->type == RdtFrameType::CONN_ACK) {
         if (this->role != Endpoint::Role::Sender) {
-          log(
-            "received connection response from receiver endpoint",
-            LogLevel::Warn
-          );
+          log("received connection response from receiver endpoint", LogLevel::Warn);
           offset += sizeof(RdtCommonFrameHeader);
           continue;
         }
 
         if (!this->waiting_for_ack) {
-          log(
-            "received connection response while not waiting for ACK",
-            LogLevel::Warn
-          );
+          log("received connection response while not waiting for ACK", LogLevel::Warn);
           offset += sizeof(RdtCommonFrameHeader);
           continue;
         }
@@ -596,10 +540,7 @@ void Endpoint::recv_handler() {
 
         uint32_t seq = frame_header->seq;
 
-        log(
-          std::format("received connection response with seq {}", seq),
-          LogLevel::Info
-        );
+        log(std::format("received connection response with seq {}", seq), LogLevel::Info);
 
         // compare seq and notify the sending thread
         this->require_resend = seq != this->last_seq;
@@ -620,19 +561,14 @@ void Endpoint::recv_handler() {
 
       } else if (frame_header->type == RdtFrameType::CONN_CLOSE) {
         if (this->waiting_for_ack) {
-          log(
-            "received connection close while waiting for ACK", LogLevel::Warn
-          );
+          log("received connection close while waiting for ACK", LogLevel::Warn);
           // just close
         }
 
         this->active = false;
 
         log(
-          std::format(
-            "received connection close with seq {}", frame_header->seq
-          ),
-          LogLevel::Info
+          std::format("received connection close with seq {}", frame_header->seq), LogLevel::Info
         );
 
         RdtHeader conn_close_header = {
@@ -649,23 +585,16 @@ void Endpoint::recv_handler() {
 
         uint8_t conn_close_buffer[1024];
 
-        assert(
-          sizeof(conn_close_header) + sizeof(conn_close_frame) <=
-          sizeof(conn_close_buffer)
-        );
+        assert(sizeof(conn_close_header) + sizeof(conn_close_frame) <= sizeof(conn_close_buffer));
+
+        memcpy(conn_close_buffer, &conn_close_header, sizeof(conn_close_header));
 
         memcpy(
-          conn_close_buffer, &conn_close_header, sizeof(conn_close_header)
-        );
-
-        memcpy(
-          conn_close_buffer + sizeof(conn_close_header), &conn_close_frame,
-          sizeof(conn_close_frame)
+          conn_close_buffer + sizeof(conn_close_header), &conn_close_frame, sizeof(conn_close_frame)
         );
 
         // checksum
-        ((RdtHeader*)conn_close_buffer)->checksum =
-          rdt_packet_checksum(conn_close_buffer);
+        ((RdtHeader*)conn_close_buffer)->checksum = rdt_packet_checksum(conn_close_buffer);
 
         std::lock_guard<std::mutex> lock(this->send_mutex);
 
@@ -674,10 +603,7 @@ void Endpoint::recv_handler() {
           throw std::runtime_error("failed to send connection close");
         }
 
-        log(
-          std::format("sent connection close with seq {}", frame_header->seq),
-          LogLevel::Info
-        );
+        log(std::format("sent connection close with seq {}", frame_header->seq), LogLevel::Info);
 
         offset += sizeof(RdtCommonFrameHeader);
 
@@ -713,14 +639,6 @@ void Endpoint::run() {
       } else {
         log("cannot connect from receiver endpoint", LogLevel::Error);
       }
-    } else if (tokens[0] == "recv") {
-      this->recv_thread = std::thread([this]() {
-        try {
-          this->recv_handler();
-        } catch (std::exception& e) {
-          log(std::format("recv thread error: {}", e.what()), LogLevel::Error);
-        }
-      });
     }
   }
 }
